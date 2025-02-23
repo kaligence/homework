@@ -1,6 +1,7 @@
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -9,39 +10,61 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
+/**
+ * BettingOfferWebApp
+ */
 public class BettingOfferWebApp {
 
-    //定义session的存储
+    /**
+     * 定义session的存储
+     */
     private static final ConcurrentHashMap<String, String> sessionMap = new ConcurrentHashMap<>();
-    //定义session过期时间的存储
+    /**
+     * 定义session过期时间的存储
+     */
     private static final ConcurrentHashMap<String, Long> sessionExpireMap = new ConcurrentHashMap<>();
-    //定义sessionKey对应userId的存储
+    /**
+     * 定义sessionKey对应userId的存储
+     */
     private static final ConcurrentHashMap<String, String> sessionReverseMap = new ConcurrentHashMap<>();
-    //定义betOffer的存储
+    /**
+     * 定义betOffer的存储
+     */
     private static final ConcurrentHashMap<String, HashMap<String, Integer>> betOfferMap = new ConcurrentHashMap<>();
-    //session过期时间，默认10分钟
+    /**
+     * session过期时间，默认10分钟
+     */
     private static final int SESSION_TIMEOUT = 600_000;
-    //清理线程执行周期，默认60分钟
+    /**
+     * 清理线程执行周期，默认60分钟
+     */
     private static final int CLEAN_TIMER = 3600_000;
+    /**
+     * 线程数
+     */
+    private static final int THREAD_COUNT = 10;
 
     public static void main(String[] args) throws IOException {
         // 创建服务器并绑定端口
-        HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress(8001), 0);
         // 路由配置
         server.createContext("/session/", new SessionHandler());
         server.createContext("/stake/", new StakeHandler());
         server.createContext("/highstakes/", new HighStakesHandler());
 
         // 启动服务器
-        server.setExecutor(null);
+        server.setExecutor(Executors.newFixedThreadPool(THREAD_COUNT));
         server.start();
 
-        System.out.println("Server started on port 8080");
+        System.out.println("Server started on port 8001");
     }
 
-    // session处理器
+    /**
+     * session处理器
+     */
     static class SessionHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -82,7 +105,9 @@ public class BettingOfferWebApp {
         }
     }
 
-    // Stake处理器
+    /**
+     * Stake处理器
+     */
     static class StakeHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -119,7 +144,7 @@ public class BettingOfferWebApp {
             }
             //处理betOfferMap
             handleBetOfferMap(userId, stake, offerId);
-            jsonResponse(exchange, requestBody, true);
+            jsonResponse(exchange, null, true);
         }
 
         /**
@@ -150,7 +175,9 @@ public class BettingOfferWebApp {
         }
     }
 
-    // HighStakes处理器
+    /**
+     * HighStakes处理器
+     */
     static class HighStakesHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -246,7 +273,6 @@ public class BettingOfferWebApp {
         new Timer().schedule(new TimerTask() {
             @Override
             public void run() {
-                System.out.println("定时清理执行开始->" + System.currentTimeMillis());
                 List<String> expireKeylist = sessionExpireMap.entrySet().stream()
                         .filter(stringLongEntry -> System.currentTimeMillis() > stringLongEntry.getValue())
                         .map(Map.Entry::getKey)
@@ -254,7 +280,6 @@ public class BettingOfferWebApp {
                 sessionExpireMap.entrySet().removeIf(entry -> expireKeylist.contains(entry.getKey()));
                 sessionMap.entrySet().removeIf(entry -> expireKeylist.contains(entry.getKey()));
                 sessionReverseMap.entrySet().removeIf(entry -> expireKeylist.contains(entry.getValue()));
-                System.out.println("定时清理执行结束->" + System.currentTimeMillis());
             }
         }, CLEAN_TIMER, CLEAN_TIMER);
     }
